@@ -48,19 +48,21 @@ pydantic-demo/ <br>
     
 2. Установите библиотеку Pydantic с поддержкой email-валидации:
     
-    bash
     
-    pip install pydantic[email]
+    ```bash
+        pip install pydantic[email]    
+    ```
+
     
 3. Скачайте файл `order_system.py`.
     
 4. Запустите демонстрацию:
     
-    bash
     
+    ```bash
     python order_system.py
+    ```
     
-
 ### Работа с приложением
 
 При запуске скрипт последовательно выполняет несколько демонстрационных блоков:
@@ -90,13 +92,13 @@ pydantic-demo/ <br>
 
 **Пример:**
 
-python
-
+```python
 address = Address(
     street="123 Main St",
     city="Springfield",
     zip_code="12345"
 )
+```
 
 ### 2. Customer — клиент
 
@@ -108,13 +110,15 @@ address = Address(
 
 **Пример:**
 
-python
-
+```python
 customer = Customer(
     name="John Doe",
     email="john@example.com",
     address=address
 )
+```
+
+
 
 ### 3. Product — товар
 
@@ -126,13 +130,13 @@ customer = Customer(
 
 **Пример:**
 
-python
-
+```python
 product = Product(
     id=1,
     name="Laptop",
     price=999.99
 )
+```
 
 ### 4. Order — заказ (с field_validator)
 
@@ -182,8 +186,7 @@ product = Product(
 
 **Входящие данные:**
 
-python
-
+```python
 incoming_data = {
     "order_id": "ORD-001",
     "customer": {
@@ -200,6 +203,7 @@ incoming_data = {
         {"id": "2", "name": "Mouse", "price": "25.50"}
     ]
 }
+```
 
 **Результат:** Создаётся валидный объект Order с автоматически вычисленной суммой 1025.49.
 
@@ -276,10 +280,10 @@ incoming_data = {
 
 Модели могут содержать другие модели в качестве полей. Pydantic рекурсивно валидирует все вложенные структуры.
 
-python
-
+```python
 class Customer(BaseModel):
     address: Address  # Вложенная модель
+```
 
 ### 4. Специализированные типы
 
@@ -292,8 +296,7 @@ class Customer(BaseModel):
 
 #### field_validator (валидация одного поля)
 
-python
-
+```python
 @field_validator('total', mode='before')
 @classmethod
 def calculate_total(cls, v, info):
@@ -302,6 +305,9 @@ def calculate_total(cls, v, info):
         return sum(p.price for p in products)
     return v
 
+```
+
+
 - `mode='before'` — выполняется до присвоения значения полю
     
 - Доступ к другим полям через `info.data`
@@ -309,14 +315,14 @@ def calculate_total(cls, v, info):
 
 #### model_validator (кросс-поляная валидация)
 
-python
-
+```python
 @model_validator(mode='after')
 def calculate_total(self) -> 'OrderBetter':
     if self.total == 0:
         self.total = sum(p.price for p in self.products)
     return self
 
+```
 - `mode='after'` — выполняется после валидации всех полей
     
 - Прямой доступ ко всем полям через `self`
@@ -326,8 +332,7 @@ def calculate_total(self) -> 'OrderBetter':
 
 ### 6. Обработка ошибок валидации
 
-python
-
+```python
 try:
     order = Order.model_validate(data)
 except ValidationError as e:
@@ -335,6 +340,7 @@ except ValidationError as e:
         print(f"Поле: {error['loc']}")
         print(f"Ошибка: {error['msg']}")
         print(f"Получено: {error.get('input')}")
+```
 
 Каждая ошибка содержит:
 
@@ -358,9 +364,11 @@ except ValidationError as e:
 
 ### 8. Значения по умолчанию
 
-python
+```python
 
 created_at: datetime = Field(default_factory=datetime.now)
+```
+
 
 - `default` — статическое значение по умолчанию
     
