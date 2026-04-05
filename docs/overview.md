@@ -244,3 +244,173 @@ print(f"{user.name} last logged in at {user.last_login}")
 ```
 
 **Результат:** Все данные провалидированы и преобразованы к правильным типам. Вложенные структуры автоматически стали объектами моделей.
+
+# Модуль 2. Основные идеи и механизмы
+
+## 1. Центральные объекты и архитектуры
+
+Основным центральным объектом Pydantic является **Модель (`BaseModel`)**. Это класс, наследующий от `BaseModel`, который определяет схему данных через аннотации типов. Модель служит контейнером для полей, валидаторов и конфигурации.
+
+Вторым ключевым объектом является **Поле (`Field`)**. Это функция, которая позволяет добавлять метаданные и ограничения к полю модели: минимальное/максимальное значение, регулярное выражение, описание и т.д..
+
+Третий фундаментальный объект — **Валидатор (`@field_validator`, `@model_validator`)**. Это декораторы, которые позволяют добавлять пользовательскую логику валидации для отдельных полей или всей модели.
+
+Архитектурно Pydantic построена по принципу **аннотаций типов как источника истины**. Библиотека использует introspection для чтения аннотаций во время выполнения и строит на их основе валидаторы и сериализаторы.
+
+Важной частью архитектуры является **`pydantic-core`** — ядро, написанное на Rust. Оно отвечает за высокопроизводительную валидацию и парсинг, в то время как Python-слой предоставляет удобный API.
+
+Еще один важный аспект — **система типов**. Pydantic расширяет стандартные типы Python, добавляя специализированные типы: `EmailStr`, `HttpUrl`, `UUID`, `PositiveInt`, `SecretStr` и многие другие.
+
+Архитектура библиотеки также включает мощный слой **настроек (`ConfigDict`)**. Через конфигурацию модели можно управлять поведением валидации: запрещать лишние поля (`extra='forbid'`), включать строгий режим (`strict=True`), настраивать окружение и многое другое.
+
+---
+
+## 2. Ключевые механизмы работы, возможности, принципы использования
+
+### 1) Механизм определения модели
+
+Основной механизм. Вы создаете класс, наследующий от `BaseModel`, и определяете поля с аннотациями типов.
+
+```python
+
+from pydantic import BaseModel
+class User(BaseModel):
+    name: str
+    age: int
+```
+
+### 2) Механизм создания экземпляров
+
+Создание объекта модели с автоматической валидацией и приведением типов.
+
+```python
+
+user = User(name="Alice", age="30")  # age приведется к int
+```
+
+### 3) Механизм валидации полей (Field)
+
+Использование `Field()` для добавления ограничений.
+
+```python
+
+from pydantic import BaseModel, Field
+class Product(BaseModel):
+    price: float = Field(gt=0, description="Цена должна быть положительной")
+    name: str = Field(min_length=1, max_length=100)
+```
+
+### 4) Механизм пользовательских валидаторов
+
+Декораторы `@field_validator` и `@model_validator` для пользовательской логики.
+
+```python
+
+from pydantic import BaseModel, field_validator
+class User(BaseModel):
+    username: str
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) < 3:
+            raise ValueError('Username must be at least 3 characters')
+        return v.lower()  # Нормализация
+```
+
+### 5) Механизм вложенных моделей
+
+Модели могут содержать другие модели как поля. Pydantic рекурсивно валидирует всю структуру.
+
+```python
+
+class Address(BaseModel):
+    city: str
+class User(BaseModel):
+    address: Address  # Вложенная модель
+```
+
+### 6) Механизм опциональных полей и значений по умолчанию
+
+Использование `Optional` и значений по умолчанию.
+
+```python
+
+from typing import Optional
+class User(BaseModel):
+    name: str
+    middle_name: Optional[str] = None  # Может отсутствовать
+    age: int = 18  # Значение по умолчанию
+```
+
+### 7) Механизм сериализации/десериализации
+
+Преобразование моделей в словари и JSON.
+
+```python
+
+user = User(name="Alice", age=30)
+user_dict = user.model_dump()      # -> dict
+user_json = user.model_dump_json() # -> JSON string
+```
+
+### 8) Строгий режим (Strict Mode)
+
+Отключает автоматическое приведение типов. Требует точного соответствия типов.
+
+```python
+
+from pydantic import BaseModel, StrictInt
+class Model(BaseModel):
+    x: StrictInt  # Только int, строка '123' вызовет ошибку
+# Или через параметр при валидации
+Model.model_validate({'x': '123'}, strict=True)  # Ошибка
+```
+
+### 9) Механизм валидации функций (`@validate_call`)
+
+Позволяет валидировать аргументы обычных функций.
+
+```python
+
+from pydantic import validate_call
+@validate_call
+def process_price(price: float) -> float:
+    return price * 1.2
+process_price("99.99")  # Работает — строка преобразуется в float
+```
+
+### 10) Механизм наследования моделей
+
+Модели могут наследоваться, расширяя и переопределяя поля.
+
+```python
+
+class BaseUser(BaseModel):
+    name: str
+class Admin(BaseUser):
+    role: str = "admin"
+```
+---
+
+### 7. Работа со структурированными данными
+
+Pydantic превращает сырые словари и JSON в строго типизированные Python-объекты.
+
+Для преобразования данных из JSON используется метод `model_validate_json()`. Pydantic автоматически парсит JSON и валидирует каждый элемент согласно модели.
+
+При работе со списками однотипных объектов можно использовать `TypeAdapter` или аннотацию `List[Model]`. Pydantic провалидирует каждый элемент списка.
+
+```python
+
+from pydantic import TypeAdapter, BaseModel
+class Item(BaseModel):
+    id: int
+    name: str
+# Валидация списка
+item_list = TypeAdapter(List[Item]).validate_python([
+    {"id": "1", "name": "Item1"},
+    {"id": "2", "name": "Item2"}
+])
+```
+
+Для работы с данными из API, где поля могут приходить в разных форматах (например, `snake_case` и `camelCase`), Pydantic поддерживает алиасы через `Field(alias=...)` или конфигурацию модели.
