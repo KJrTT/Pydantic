@@ -368,8 +368,22 @@ except ValidationError as e:
 
 created_at: datetime = Field(default_factory=datetime.now)
 ```
-
-
 - `default` — статическое значение по умолчанию
     
 - `default_factory` — вызываемый объект для генерации значения
+
+## Примеры вывода
+
+<img width="495" height="230" alt="image" src="https://github.com/user-attachments/assets/8d90b302-7528-4f74-813a-fff31762df87" />
+<img width="529" height="145" alt="image" src="https://github.com/user-attachments/assets/21d94896-7628-42c5-a529-1cae7580e343" />
+<img width="1397" height="578" alt="image" src="https://github.com/user-attachments/assets/d50443a6-16ef-49af-81cc-dc6c3d5c4748" />
+<img width="1155" height="185" alt="image" src="https://github.com/user-attachments/assets/003666af-adfb-4b39-9ef9-b83ff2ff495d" />
+
+
+
+
+
+
+
+
+
