@@ -483,3 +483,298 @@ class User(TimestampMixin, BaseModel):
     email: EmailStr
 ```
 
+# Модуль 3. Практическое применение
+
+## 11. Формулировка практического задания
+
+**Контекст:** При разработке веб-приложений, API или даже простых скриптов, обрабатывающих пользовательский ввод, надежная валидация данных критически важна. Ошибки в типах данных могут привести к непредсказуемому поведению, уязвимостям и падениям приложения.
+
+**Прикладная задача:** Разработать систему валидации для "Системы управления заказами интернет-магазина", которая демонстрирует возможности Pydantic для:
+
+1. Определения моделей данных (пользователь, товар, заказ) с различными типами полей.
+    
+2. Валидации входящих данных (пользовательский ввод, JSON из API) с понятными сообщениями об ошибках.
+    
+3. Использования пользовательских валидаторов для сложной логики.
+    
+4. Сериализации моделей для ответа API.
+    
+
+```python
+
+from pydantic import BaseModel, Field, field_validator, EmailStr, ValidationError
+from typing import List, Optional
+from datetime import datetime
+import json
+# 1. Определяем модели
+class Address(BaseModel):
+    street: str = Field(min_length=1)
+    city: str = Field(min_length=1)
+    zip_code: str = Field(pattern=r'^\d{5}$')  # Regex для zip-кода (USA)
+class Customer(BaseModel):
+    name: str = Field(min_length=2, max_length=50)
+    email: EmailStr
+    address: Address
+class Product(BaseModel):
+    id: int = Field(gt=0)
+    name: str = Field(min_length=1)
+    price: float = Field(gt=0, le=10000)
+class Order(BaseModel):
+    order_id: str
+    customer: Customer
+    products: List[Product]
+    total: Optional[float] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+    # Пользовательский валидатор для расчета итоговой суммы
+    @field_validator('total', mode='after')
+    @classmethod
+    def calculate_total(cls, v, info):
+        products = info.data.get('products', [])
+        if products:
+            return sum(p.price for p in products)
+        return v
+# 2. Входящие данные (симуляция POST-запроса)
+incoming_data = {
+    "order_id": "ORD-001",
+    "customer": {
+        "name": "John Doe",
+        "email": "john@example.com",
+        "address": {
+            "street": "123 Main St",
+            "city": "Springfield",
+            "zip_code": "12345"
+        }
+    },
+    "products": [
+        {"id": 1, "name": "Laptop", "price": 999.99},
+        {"id": 2, "name": "Mouse", "price": 25.50}
+    ]
+}
+# 3. Валидация и создание объекта
+try:
+    order = Order(**incoming_data)
+    print(f"Заказ {order.order_id} создан")
+    print(f"Итоговая сумма: ${order.total}")
+    print(f"Дата создания: {order.created_at}")
+except ValidationError as e:
+    print("Ошибка валидации:")
+    for error in e.errors():
+        print(f"  - Поле {'.'.join(str(l) for l in error['loc'])}: {error['msg']}")
+# 4. Сериализация для ответа клиенту
+response_json = order.model_dump_json(indent=2)
+print("\nОтвет API:")
+print(response_json)
+```
+**Вывод:** Скрипт создает валидный объект `Order`, автоматически вычисляет `total`, преобразует дату и готовит JSON для ответа.
+
+---
+
+## 12. Архитектура решения
+
+Решение строится как модульное приложение с четким разделением ответственности.
+
+**Структура проекта:**
+
+1. **Модели данных (models/):** Pydantic модели, представляющие сущности предметной области. Каждый файл содержит модели для одного домена.
+    
+2. **Сервисный слой (services/):** Бизнес-логика, работающая с уже валидированными объектами моделей.
+    
+3. **Слой ввода/вывода (io/):** Функции для чтения/записи данных, использующие Pydantic для валидации на границах.
+    
+
+```python
+
+# --- models/customer.py ---
+from pydantic import BaseModel, EmailStr, Field
+class Customer(BaseModel):
+    id: int
+    name: str = Field(min_length=2)
+    email: EmailStr
+# --- models/order.py ---
+from pydantic import BaseModel, Field
+from typing import List
+from datetime import datetime
+from .customer import Customer
+from .product import Product
+class Order(BaseModel):
+    order_id: str
+    customer: Customer
+    products: List[Product]
+    status: str = Field(default="pending", pattern=r'^(pending|paid|shipped)$')
+    created_at: datetime = Field(default_factory=datetime.now)
+# --- services/order_service.py ---
+from models import Order, Customer
+class OrderService:
+    def process_order(self, order: Order) -> dict:
+        # Работаем с уже валидным объектом
+        total = sum(p.price for p in order.products)
+        return {"status": "processed", "total": total}
+# --- main.py ---
+from models import Customer, Order, Product
+from services import OrderService
+import json
+def main():
+    with open("order_input.json") as f:
+        raw_data = json.load(f)
+    try:
+        order = Order(**raw_data)
+        service = OrderService()
+        result = service.process_order(order)
+        print(result)
+    except ValidationError as e:
+        print(f"Invalid input: {e}")
+```
+**Минимальный рабочий пример (все вместе):**
+
+```python
+
+from pydantic import BaseModel, Field, ValidationError
+class User(BaseModel):
+    name: str = Field(min_length=2)
+    age: int = Field(ge=0, le=150)
+# Валидация
+try:
+    user = User(name="A", age=200)
+except ValidationError as e:
+    print(e)
+```
+
+**Вывод:** Ошибки валидации с указанием, что имя слишком короткое, а возраст выходит за пределы.
+
+## 13. Этапы реализации
+
+**Этап 1: Базовое создание модели**  
+Научиться импортировать `BaseModel`, определять простые поля, создавать экземпляры и читать значения.
+
+**Этап 2: Добавление ограничений через Field**  
+Использовать `Field()` для добавления `min_length`, `max_length`, `ge`, `le`, `regex` и других ограничений.
+
+**Этап 3: Работа с опциональными полями и значениями по умолчанию**  
+Освоить `Optional`, `None` как значение по умолчанию и `default_factory` для динамических значений.
+
+**Этап 4: Пользовательские валидаторы**  
+Изучить `@field_validator` и `@model_validator`. Научиться писать валидаторы, которые преобразуют значения и выбрасывают понятные ошибки.
+
+**Этап 5: Вложенные модели и списки**  
+Освоить композицию моделей: использовать одну модель как поле другой, использовать `List[Model]` и `Dict[str, Model]`.
+
+**Этап 6: Сериализация и работа с JSON**  
+Научиться преобразовывать модели в словари (`model_dump()`) и JSON (`model_dump_json()`), а также создавать модели из JSON (`model_validate_json()`).
+
+## 14. Возникшие сложности
+
+**Сложности работы с Pydantic**
+
+### 1. Понимание автоматического приведения типов
+
+Новички могут быть удивлены, что Pydantic преобразует "25" в 25. Иногда это нежелательно (например, для ID, которые должны быть строками).
+
+```python
+
+# Решение: использовать StrictInt или включить strict режим
+from pydantic import BaseModel, StrictInt
+class Model(BaseModel):
+    id: StrictInt  # Теперь '123' вызовет ошибку
+```
+
+### 2. Путаница между v1 и v2 API
+
+Pydantic v2 значительно изменил API: `@validator` стал `@field_validator`, `@root_validator` стал `@model_validator`, `parse_obj` стал `model_validate`.
+
+
+
+```python
+# Pydantic v2
+@field_validator('name')
+def validate_name(cls, v):
+    return v
+# Вместо старого @validator из v1
+```
+
+### 3. Порядок выполнения валидаторов
+
+Валидаторы выполняются в определенном порядке. Поля, аннотированные как `Optional`, могут получать `None` до того, как валидатор сработает.
+
+```python
+
+# Используйте mode='before' для валидации до преобразования типа
+@field_validator('field', mode='before')
+def validate_before(cls, v):
+    return v
+```
+
+### 4. Работа с datetime и часовыми поясами
+
+Pydantic принимает строки в ISO формате, но с часовыми поясами нужно быть осторожным.
+
+```python
+
+from datetime import datetime, timezone
+# Рекомендуется использовать наивные datetime или явно указывать timezone
+class Model(BaseModel):
+    created_at: datetime
+```
+
+**Ограничения проекта**
+
+### 1. Производительность при очень больших объемах
+
+Хотя Pydantic v2 очень быстр благодаря Rust, валидация миллионов объектов все еще может быть узким местом. Для таких случаев рассмотрите пакетную обработку.
+
+### 2. Сложные рекурсивные модели
+
+Модели, которые ссылаются сами на себя (например, дерево категорий), требуют использования `forward references` (строковые аннотации).
+
+```python
+
+class Category(BaseModel):
+    name: str
+    subcategories: List['Category']  # Строковая ссылка
+```
+
+### 3. Нет встроенной валидации бизнес-правил
+
+Pydantic валидирует типы и форматы, но не бизнес-правила типа "сумма заказа не может превышать кредитный лимит". Такие правила должны быть в бизнес-слое.
+
+### 4. Совместимость с некоторыми типами
+
+Не все Python типы поддерживаются "из коробки". Например, для `Enum` нужно наследовать от `str, Enum` для корректной работы с JSON.
+
+## 15. Итоговая оценка инструмента
+
+Pydantic — это **промышленный стандарт** для валидации данных и управления настройками в Python. Она предоставляет наиболее элегантный и производительный способ обеспечения типобезопасности на границах приложения.
+
+**Ключевые преимущества:**
+
+- **Интеграция с аннотациями типов:** Использует стандартный Python-синтаксис, не требует изучения DSL.
+    
+- **Производительность:** Rust-ядро обеспечивает 5-50x ускорение по сравнению с альтернативами.
+    
+- **Понятные ошибки:** Структурированные сообщения об ошибках упрощают отладку.
+    
+- **Экосистема:** Стандарт для FastAPI, PydanticSettings, PydanticAI.
+    
+
+**Когда использовать:**
+
+- Любое приложение, которое принимает данные извне (API, формы, файлы).
+    
+- Управление конфигурацией и переменными окружения.
+    
+- Сериализация/десериализация данных для обмена с другими системами.
+    
+- Создание типобезопасных агентов ИИ (PydanticAI).
+    
+
+**Сравнение с альтернативами:**
+
+| Инструмент      | Сильные стороны                                         | Слабые стороны                       |
+| --------------- | ------------------------------------------------------- | ------------------------------------ |
+| **Pydantic**    | Производительность, интеграция с type hints, экосистема | Сложность миграции между v1 и v2     |
+| **dataclasses** | Встроен в Python, легкость                              | Нет валидации, нет приведения типов. |
+| **attrs**       | Гибкость, валидаторы                                    | Внешняя зависимость, многословнее.   |
+| **marshmallow** | Зрелый, отделение схем от моделей                       | Нет type hints, многословный.        |
+| **Cerberus**    | Динамические схемы, легкость                            | Нет интеграции с классами.           |
+
+**Вывод:**  
+Pydantic — это незаменимый инструмент для современного Python-разработчика. Она превращает ручную, подверженную ошибкам валидацию данных в декларативный, надежный и производительный процесс. Освоив Pydantic, вы сможете писать более безопасный, чистый и поддерживаемый код, особенно в контексте веб-разработки и интеграций с внешними системами.
